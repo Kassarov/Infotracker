@@ -3,8 +3,8 @@ from aiogram import Bot, Dispatcher, types
 from database import init_db, get_last_data, set_last_data
 from parser      import parse_tiktok, parse_instagram
 
-BOT_TOKEN   = os.getenv("BOT_TOKEN") or "ВСТАВЬ_ТОКЕН_ОТ_BotFather"
-YOUR_ID     = int(os.getenv("YOUR_ID") or 123456789)   # ← @userinfobot
+BOT_TOKEN   = os.getenv("BOT_TOKEN") or "8400432306:AAFg0b3sUA-bODsf4Ddbym8OcbW4eWOpzU8"
+YOUR_ID     = int(os.getenv("YOUR_ID") or 1590094614)   # ← @userinfobot
 
 bot = Bot(token=BOT_TOKEN)
 dp  = Dispatcher()
