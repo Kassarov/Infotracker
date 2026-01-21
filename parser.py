@@ -1,33 +1,31 @@
-import requests, json, re, instaloader
+import re, requests, instaloader
 
-def parse_tiktok(url):
+SESSION = requests.Session()
+L = instaloader.Instaloader(download_pictures=False, download_videos=False)
+
+def parse_tiktok(url: str):
     try:
-        shortcode = re.findall(r'/@(.+)/video/(\d+)', url)[0][1]
-        api_url = f"https://api16-normal-c-useast1a.tiktokv.com/aweme/v1/aweme/detail/?aweme_id={shortcode}"
-        data = requests.get(api_url, timeout=10).json()
-        video = data['aweme_detail']
+        aweme_id = re.findall(r"/video/(\d+)", url)[0]
+        api = f"https://api16-normal-c-useast1a.tiktokv.com/aweme/v1/aweme/detail/?aweme_id={aweme_id}"
+        j = SESSION.get(api, timeout=10).json()["aweme_detail"]
         return {
-            "likes": video['statistics']['digg_count'],
-            "views": video['statistics']['play_count'],
-            "comments": [
-                {"user": c['user']['unique_id'], "text": c['text']}
-                for c in video.get('comments', [])[:5]
-            ]
+            "likes"   : j["statistics"]["digg_count"],
+            "views"   : j["statistics"]["play_count"],
+            "comments": [{"user": c["user"]["unique_id"], "text": c["text"]}
+                         for c in j.get("comments", [])[:10]]
         }
     except Exception as e:
         return {"error": str(e)}
 
-def parse_instagram(url):
+def parse_instagram(url: str):
     try:
-        L = instaloader.Instaloader()
-        shortcode = re.findall(r"/p/([a-zA-Z0-9_-]+)", url)[0]
-        post = instaloader.Post.from_shortcode(L.context, shortcode)
+        short = re.findall(r"/p/([a-zA-Z0-9_-]+)", url)[0]
+        post  = instaloader.Post.from_shortcode(L.context, short)
         return {
-            "likes": post.likes,
-            "comments": [
-                {"user": c.owner.username, "text": c.text}
-                for c in post.get_comments()[:5]
-            ]
+            "likes"   : post.likes,
+            "views"   : 0,   # у постов нет публичного счётчика просмотров
+            "comments": [{"user": c.owner.username, "text": c.text}
+                         for c in post.get_comments()[:10]]
         }
     except Exception as e:
         return {"error": str(e)}
