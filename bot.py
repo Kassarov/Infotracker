@@ -11,7 +11,7 @@ from parser_profile   import get_tiktok_profile_posts, get_instagram_profile_pos
 import aiohttp.web as web
 
 # --------------- настройки -----------------
-BOT_TOKEN   = os.getenv("BOT_TOKEN") or "8400432306:AAGCINBV4yA0YN-Rt9rE2WCGlCwpGW27gzo"
+BOT_TOKEN   = os.getenv("BOT_TOKEN") or "8170412482:AAFzwK7uP4LXHNjb8ijvVnDOAKt0mwMLn9I"
 YOUR_ID     = int(os.getenv("YOUR_ID") or 1590094614)   # ← @userinfobot
 CHECK_SEC = 60
 # ------------------------------------------
