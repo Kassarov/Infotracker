@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# bot.py  –  Web-Service-совместимый Telegram-бот (TikTok + Instagram профили)
-
+# bot.py  –  Web-Service-совместимый Telegram-бот (TikTok + Instagram профили)/финал
 import os
 import asyncio
 import json
