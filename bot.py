@@ -1,70 +1,70 @@
-import asyncio, json, os
+import asyncio, json, os, re
 from aiogram import Bot, Dispatcher, types
-from database import init_db, get_last_data, set_last_data
-from parser      import parse_tiktok, parse_instagram
+from database_profile import init_db, get_post, save_post
+from parser_profile import get_tiktok_profile_posts, get_instagram_profile_posts
 
 BOT_TOKEN   = os.getenv("BOT_TOKEN") or "8400432306:AAFg0b3sUA-bODsf4Ddbym8OcbW4eWOpzU8"
 YOUR_ID     = int(os.getenv("YOUR_ID") or 1590094614)   # ← @userinfobot
 
+
 bot = Bot(token=BOT_TOKEN)
 dp  = Dispatcher()
 
-CHECK_SEC = 5*60          # 5 мин
-tracked   = set()         # {url, ...}
+CHECK_SEC = 5*60
+tracked_profiles = set()
 
 async def send(msg: str):
     await bot.send_message(YOUR_ID, msg)
 
-# ------- приём ссылок -------
+# ------- приём ссылки на профиль -------
 @dp.message(lambda m: m.text and m.text.startswith("http"))
-async def add_url(message: types.Message):
+async def add_profile(message: types.Message):
     url = message.text.strip()
-    if "tiktok.com" in url:
-        plat, data = "tiktok",    parse_tiktok(url)
-    elif "instagram.com" in url:
-        plat, data = "instagram", parse_instagram(url)
+    if "tiktok.com/@" in url or "instagram.com/" in url:
+        tracked_profiles.add(url)
+        await message.answer("✅ Профиль добавлен в отслеживание!")
     else:
-        return await message.answer("❌ Принимаю только TikTok / Instagram")
-
-    if "error" in data:
-        return await message.answer(f"❌ Парсинг: {data['error']}")
-
-    tracked.add(url)
-    set_last_data(url, plat, json.dumps(data))
-    await message.answer(
-        f"✅ Отслеживаю {plat}\n"
-        f"Лайков: {data['likes']}\n"
-        f"Просмотров: {data.get('views','—')}\n"
-        f"Комментариев: {len(data['comments'])}"
-    )
+        await message.answer("❌ Отправь ссылку на профиль TikTok или Instagram")
 
 # ------- фоновый монитор -------
 async def monitor():
     await asyncio.sleep(15)
     while True:
-        for url in list(tracked):
-            plat = "tiktok" if "tiktok.com" in url else "instagram"
-            old  = json.loads(get_last_data(url) or "{}")
-            new  = parse_tiktok(url) if plat=="tiktok" else parse_instagram(url)
-            if "error" in new:
-                continue
+        for profile_url in list(tracked_profiles):
+            platform = "tiktok" if "tiktok.com" in profile_url else "instagram"
+            posts = []
+            if platform == "tiktok":
+                posts = get_tiktok_profile_posts(profile_url)
+            else:
+                posts = get_instagram_profile_posts(profile_url)
 
-            # лайки
-            if new["likes"] > old.get("likes",0):
-                await send(f"❤️ +1 лайк на {plat} ({new['likes']})")
+            for p in posts:
+                old = get_post(p["post_id"])
+                if not old:
+                    # новый пост
+                    await send(f"📱 {platform.upper()}\n🆕 Новый пост!\n{p['url']}")
+                    save_post(p["post_id"], platform, p["url"], p["likes"], p["views"], p["comments"])
+                    continue
 
-            # +1000 просмотров (только тикток)
-            if plat=="tiktok":
-                if new["views"]//1000 > old.get("views",0)//1000:
-                    await send(f"👁️ +1000 просмотров на TikTok ({new['views']})")
+                old_likes, old_views, old_comments_json = old
+                old_comments = json.loads(old_comments_json)
 
-            # комментарии
-            old_keys = {c["user"]+c["text"] for c in old.get("comments",[])}
-            for c in new["comments"]:
-                if c["user"]+c["text"] not in old_keys:
-                    await send(f"💬 @{c['user']} на {plat}:\n{c['text']}")
+                # лайки
+                if p["likes"] > old_likes:
+                    await send(f"📱 {platform.upper()}\n❤️ +1 лайк на посте\n{p['url']}")
 
-            set_last_data(url, plat, json.dumps(new))
+                # +1000 просмотров (только тикток)
+                if platform == "tiktok" and p["views"]//1000 > old_views//1000:
+                    await send(f"📱 TIKTOK\n👁️ +1000 просмотров на посте\n{p['url']}")
+
+                # комментарии
+                old_keys = {c["user"]+c["text"] for c in old_comments}
+                for c in p["comments"]:
+                    if c["user"]+c["text"] not in old_keys:
+                        await send(f"📱 {platform.upper()}\n💬 Новый комментарий под постом\n{p['url']}\n👤 @{c['user']}\n💬 {c['text']}")
+
+                save_post(p["post_id"], platform, p["url"], p["likes"], p["views"], p["comments"])
+
         await asyncio.sleep(CHECK_SEC)
 
 # ------- запуск -------
