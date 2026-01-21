@@ -1,0 +1,5 @@
+aiogram==3.4.1
+instaloader==4.10.4
+requests==2.31.0
+lxml==4.9.3
+aiohttp==3.9.1
