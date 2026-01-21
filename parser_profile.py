@@ -30,28 +30,6 @@ def get_tiktok_profile_posts(profile_url: str):
         return []
 
 def get_instagram_profile_posts(profile_url: str):
-    """
-    Возвращает список постов профиля Instagram:
-    [{post_id, url, likes, views:0, comments:[{user,text}]}]
-    """
-    try:
-        username = re.findall(r"instagram\.com/(\w+)", profile_url)[0]
-        profile = instaloader.Profile.from_username(L.context, username)
-        posts = []
-        for post in profile.get_posts():
-            posts.append({
-                "post_id": post.shortcode,
-                "url": f"https://www.instagram.com/p/{post.shortcode}/",
-                "likes": post.likes,
-                "views": 0,
-                "comments": [
-                    {"user": c.owner.username, "text": c.text}
-                    for c in post.get_comments()[:10]
-                ]
-            })
-            if len(posts) >= 10:  # ограничим 10 последними
-                break
-        return posts
-    except Exception as e:
-        print("Instagram profile error:", e)
-        return []
+    # временно отключаем Instagram
+    print("[WARN] Instagram temporarily disabled (401)")
+    return []
