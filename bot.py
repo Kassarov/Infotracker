@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-#  bot.py  –  полностью готовый файл для Render (Web-Service, free)
-#  1. Поднимает фиктивный HTTP-сервер на порту, который назначит Render
-#  2. Одновременно работает Telegram-бот (aiogram polling)
-#  3. Отслеживает ПРОФИЛИ TikTok / Instagram: новые посты, лайки, +1000 просмотров, комментарии
+# bot.py  –  Web-Service-совместимый Telegram-бот (TikTok + Instagram профили)
 
 import os
 import asyncio
@@ -11,34 +8,31 @@ import re
 from aiogram import Bot, Dispatcher, types
 from database_profile import init_db, get_post, save_post
 from parser_profile   import get_tiktok_profile_posts, get_instagram_profile_posts
+import aiohttp.web as web
 
 # --------------- настройки -----------------
 BOT_TOKEN   = os.getenv("BOT_TOKEN") or "8400432306:AAFg0b3sUA-bODsf4Ddbym8OcbW4eWOpzU8"
 YOUR_ID     = int(os.getenv("YOUR_ID") or 1590094614)   # ← @userinfobot
-
-CHECK_SEC = 3 * 60                                   # 5 мин
+CHECK_SEC = 3 * 60
 # ------------------------------------------
 
 bot = Bot(token=BOT_TOKEN)
 dp  = Dispatcher()
 
-tracked_profiles = set()        # ссылки на профили
+tracked_profiles = set()
 
-# =====================  HTTP-заглушка для Render  =====================
-import aiohttp.web as web
-
+# =====================  HTTP-заглушка (асинхронно)  =====================
 async def health(_):
     return web.Response(text="OK")
 
-def keep_alive():
+async def start_site():
     port = int(os.getenv("PORT", 8000))
     app = web.Application()
     app.router.add_get("/", health)
     runner = web.AppRunner(app)
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(runner.setup())
+    await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
-    loop.run_until_complete(site.start())
+    await site.start()
     print(f"[INFO] Health-check server started on port {port}")
 
 # =====================  уведомления  =====================
@@ -57,7 +51,7 @@ async def add_profile(message: types.Message):
 
 # =====================  фоновый монитор  =====================
 async def monitor():
-    await asyncio.sleep(15)          # даём время подняться polling'у
+    await asyncio.sleep(15)
     while True:
         for profile_url in list(tracked_profiles):
             platform = "tiktok" if "tiktok.com" in profile_url else "instagram"
@@ -101,9 +95,12 @@ async def monitor():
 # =====================  запуск  =====================
 async def main():
     init_db()
-    keep_alive()                     # поднимаем HTTP-заглушку
-    asyncio.create_task(monitor())   # фоновый монитор
-    await dp.start_polling(bot)      # Telegram polling
+    # одновременно поднимаем HTTP-заглушку и polling
+    await asyncio.gather(
+        start_site(),
+        monitor(),
+        dp.start_polling(bot)
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())
