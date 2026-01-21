@@ -13,7 +13,7 @@ import aiohttp.web as web
 # --------------- настройки -----------------
 BOT_TOKEN   = os.getenv("BOT_TOKEN") or "8400432306:AAFg0b3sUA-bODsf4Ddbym8OcbW4eWOpzU8"
 YOUR_ID     = int(os.getenv("YOUR_ID") or 1590094614)   # ← @userinfobot
-CHECK_SEC = 3 * 60
+CHECK_SEC = 60
 # ------------------------------------------
 
 bot = Bot(token=BOT_TOKEN)
