@@ -1,22 +1,51 @@
-import asyncio, json, os, re
+#!/usr/bin/env python3
+#  bot.py  –  полностью готовый файл для Render (Web-Service, free)
+#  1. Поднимает фиктивный HTTP-сервер на порту, который назначит Render
+#  2. Одновременно работает Telegram-бот (aiogram polling)
+#  3. Отслеживает ПРОФИЛИ TikTok / Instagram: новые посты, лайки, +1000 просмотров, комментарии
+
+import os
+import asyncio
+import json
+import re
 from aiogram import Bot, Dispatcher, types
 from database_profile import init_db, get_post, save_post
-from parser_profile import get_tiktok_profile_posts, get_instagram_profile_posts
+from parser_profile   import get_tiktok_profile_posts, get_instagram_profile_posts
 
+# --------------- настройки -----------------
 BOT_TOKEN   = os.getenv("BOT_TOKEN") or "8400432306:AAFg0b3sUA-bODsf4Ddbym8OcbW4eWOpzU8"
 YOUR_ID     = int(os.getenv("YOUR_ID") or 1590094614)   # ← @userinfobot
 
+CHECK_SEC = 3 * 60                                   # 5 мин
+# ------------------------------------------
 
 bot = Bot(token=BOT_TOKEN)
 dp  = Dispatcher()
 
-CHECK_SEC = 5*60
-tracked_profiles = set()
+tracked_profiles = set()        # ссылки на профили
 
+# =====================  HTTP-заглушка для Render  =====================
+import aiohttp.web as web
+
+async def health(_):
+    return web.Response(text="OK")
+
+def keep_alive():
+    port = int(os.getenv("PORT", 8000))
+    app = web.Application()
+    app.router.add_get("/", health)
+    runner = web.AppRunner(app)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(runner.setup())
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    loop.run_until_complete(site.start())
+    print(f"[INFO] Health-check server started on port {port}")
+
+# =====================  уведомления  =====================
 async def send(msg: str):
     await bot.send_message(YOUR_ID, msg)
 
-# ------- приём ссылки на профиль -------
+# =====================  приём профилей  =====================
 @dp.message(lambda m: m.text and m.text.startswith("http"))
 async def add_profile(message: types.Message):
     url = message.text.strip()
@@ -26,13 +55,13 @@ async def add_profile(message: types.Message):
     else:
         await message.answer("❌ Отправь ссылку на профиль TikTok или Instagram")
 
-# ------- фоновый монитор -------
+# =====================  фоновый монитор  =====================
 async def monitor():
-    await asyncio.sleep(15)
+    await asyncio.sleep(15)          # даём время подняться polling'у
     while True:
         for profile_url in list(tracked_profiles):
             platform = "tiktok" if "tiktok.com" in profile_url else "instagram"
-            posts = []
+            posts    = []
             if platform == "tiktok":
                 posts = get_tiktok_profile_posts(profile_url)
             else:
@@ -40,10 +69,10 @@ async def monitor():
 
             for p in posts:
                 old = get_post(p["post_id"])
-                if not old:
-                    # новый пост
+                if not old:          # новый пост
                     await send(f"📱 {platform.upper()}\n🆕 Новый пост!\n{p['url']}")
-                    save_post(p["post_id"], platform, p["url"], p["likes"], p["views"], p["comments"])
+                    save_post(p["post_id"], platform, p["url"],
+                              p["likes"], p["views"], p["comments"])
                     continue
 
                 old_likes, old_views, old_comments_json = old
@@ -51,27 +80,30 @@ async def monitor():
 
                 # лайки
                 if p["likes"] > old_likes:
-                    await send(f"📱 {platform.upper()}\n❤️ +1 лайк на посте\n{p['url']}")
+                    await send(f"📱 {platform.upper()}\n❤️ +лайк на посте\n{p['url']}")
 
                 # +1000 просмотров (только тикток)
-                if platform == "tiktok" and p["views"]//1000 > old_views//1000:
+                if platform == "tiktok" and p["views"] // 1000 > old_views // 1000:
                     await send(f"📱 TIKTOK\n👁️ +1000 просмотров на посте\n{p['url']}")
 
                 # комментарии
-                old_keys = {c["user"]+c["text"] for c in old_comments}
+                old_keys = {c["user"] + c["text"] for c in old_comments}
                 for c in p["comments"]:
-                    if c["user"]+c["text"] not in old_keys:
-                        await send(f"📱 {platform.upper()}\n💬 Новый комментарий под постом\n{p['url']}\n👤 @{c['user']}\n💬 {c['text']}")
+                    if c["user"] + c["text"] not in old_keys:
+                        await send(f"📱 {platform.upper()}\n💬 Новый комментарий\n"
+                                   f"👤 @{c['user']}\n💬 {c['text']}\n{p['url']}")
 
-                save_post(p["post_id"], platform, p["url"], p["likes"], p["views"], p["comments"])
+                save_post(p["post_id"], platform, p["url"],
+                          p["likes"], p["views"], p["comments"])
 
         await asyncio.sleep(CHECK_SEC)
 
-# ------- запуск -------
+# =====================  запуск  =====================
 async def main():
     init_db()
-    asyncio.create_task(monitor())
-    await dp.start_polling(bot)
+    keep_alive()                     # поднимаем HTTP-заглушку
+    asyncio.create_task(monitor())   # фоновый монитор
+    await dp.start_polling(bot)      # Telegram polling
 
 if __name__ == "__main__":
     asyncio.run(main())
