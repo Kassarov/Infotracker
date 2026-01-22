@@ -1,26 +1,39 @@
-#!/usr/bin/env python355
-# bot.py  –  Web-Service-совместимый Telegram-бот (TikTok + Instagram профили)/финал
+#!/usr/bin/env python3
+#  bot.py  –  однопоточный Telegram-бот (TikTok + Instagram профили)
+#  Render-compatible, health-check, file-lock
+
 import os
+import sys
+import tempfile
+import fcntl
 import asyncio
 import json
-import re
 from aiogram import Bot, Dispatcher, types
 from database_profile import init_db, get_post, save_post
 from parser_profile   import get_tiktok_profile_posts, get_instagram_profile_posts
 import aiohttp.web as web
 
-# --------------- настройки -----------------
-BOT_TOKEN   = os.getenv("BOT_TOKEN") or "8170412482:AAFzwK7uP4LXHNjb8ijvVnDOAKt0mwMLn9I"
-YOUR_ID     = int(os.getenv("YOUR_ID") or 1590094614)   # ← @userinfobot
-CHECK_SEC = 60
-# ------------------------------------------
+# --------------------- настройки ---------------------
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "8366215497:AAECtKdDxYRXoSQ_1khj0yecDErPu9o5dLg"
+YOUR_ID   = int(os.getenv("YOUR_ID")   or 1590094614)
+CHECK_SEC = 5 * 60
+# ----------------------------------------------------
+
+# ============ однопоточный запуск (Linux) ============
+LOCK_FILE = os.path.join(tempfile.gettempdir(), "bot.lock")
+lock_fd = open(LOCK_FILE, "w")
+try:
+    fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    print("Another instance is already running, exiting.")
+    sys.exit(1)
+# =====================================================
 
 bot = Bot(token=BOT_TOKEN)
 dp  = Dispatcher()
-
 tracked_profiles = set()
 
-# =====================  HTTP-заглушка (асинхронно)  =====================
+# ===================== health-check =====================
 async def health(_):
     return web.Response(text="OK")
 
@@ -34,11 +47,11 @@ async def start_site():
     await site.start()
     print(f"[INFO] Health-check server started on port {port}")
 
-# =====================  уведомления  =====================
+# ===================== уведомления =====================
 async def send(msg: str):
     await bot.send_message(YOUR_ID, msg)
 
-# =====================  приём профилей  =====================
+# ===================== приём профилей =====================
 @dp.message(lambda m: m.text and m.text.startswith("http"))
 async def add_profile(message: types.Message):
     url = message.text.strip()
@@ -48,7 +61,7 @@ async def add_profile(message: types.Message):
     else:
         await message.answer("❌ Отправь ссылку на профиль TikTok или Instagram")
 
-# =====================  фоновый монитор  =====================
+# ===================== фоновый монитор =====================
 async def monitor():
     await asyncio.sleep(15)
     while True:
@@ -91,10 +104,9 @@ async def monitor():
 
         await asyncio.sleep(CHECK_SEC)
 
-# =====================  запуск  =====================
+# ===================== запуск =====================
 async def main():
     init_db()
-    # одновременно поднимаем HTTP-заглушку и polling
     await asyncio.gather(
         start_site(),
         monitor(),
