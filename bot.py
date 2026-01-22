@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python355
 # bot.py  –  Web-Service-совместимый Telegram-бот (TikTok + Instagram профили)/финал
 import os
 import asyncio
